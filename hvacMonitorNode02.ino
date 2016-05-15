@@ -12,7 +12,7 @@ DallasTemperature sensors(&oneWire);
 
 DeviceAddress ds18b20kk = { 0x28, 0xEE, 0x9D, 0xEF, 0x00, 0x16, 0x02, 0x56 }; // KK
 
-char auth[] = "fromBlynkApp *04";
+char auth[] = "fromBlynkApp";
 
 SimpleTimer timer;
 
@@ -29,7 +29,18 @@ void setup()
   sensors.setResolution(ds18b20kk, 10);
 
   timer.setInterval(2000L, sendTemps); // Temperature sensor polling interval
-  timer.setInterval(5000L, sendHeartbeat); // Temperature sensor polling interval
+  timer.setInterval(5000L, heartbeatOn); // Temperature sensor polling interval
+}
+
+void heartbeatOn()  // Blinks a virtual LED in the Blynk app to show the ESP is live and reporting.
+{
+  led1.on();
+  timer.setTimeout(2500L, heartbeatOff);
+}
+
+void heartbeatOff()
+{
+  led1.off();  // The OFF portion of the LED heartbeat indicator in the Blynk app
 }
 
 void sendTemps()
@@ -47,11 +58,6 @@ void sendTemps()
     Blynk.virtualWrite(4, "ERR");
   }
   led1.off();
-}
-
-void sendHeartbeat()
-{
-  led1.on();
 }
 
 void loop()
