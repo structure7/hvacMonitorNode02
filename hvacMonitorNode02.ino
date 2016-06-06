@@ -4,7 +4,6 @@
 #include <BlynkSimpleEsp8266.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <TimeLib.h>
 #define ONE_WIRE_BUS 0
 
 OneWire oneWire(ONE_WIRE_BUS);
@@ -30,7 +29,7 @@ void setup()
   sensors.setResolution(ds18b20kk, 10);
 
   timer.setInterval(2000L, sendTemps); // Temperature sensor polling interval
-  timer.setInterval(5000L, heartbeatOn); // Temperature sensor polling interval
+  heartbeatOn();
 }
 
 BLYNK_WRITE(V27) // App button to report uptime
@@ -48,7 +47,7 @@ void uptimeSend()  // Blinks a virtual LED in the Blynk app to show the ESP is l
   float secDur = millis() / 1000;
   float minDur = secDur / 60;
   float hourDur = minDur / 60;
-  terminal.println(String("Node02 (KK) update: ") + hourDur + " hours ");
+  terminal.println(String("Node02 (KK): ") + hourDur + " hours ");
   terminal.flush();
 }
 
@@ -61,6 +60,7 @@ void heartbeatOn()  // Blinks a virtual LED in the Blynk app to show the ESP is 
 void heartbeatOff()
 {
   led1.off();  // The OFF portion of the LED heartbeat indicator in the Blynk app
+  timer.setTimeout(2500L, heartbeatOn);
 }
 
 void sendTemps()
@@ -77,7 +77,6 @@ void sendTemps()
   {
     Blynk.virtualWrite(4, "ERR");
   }
-  led1.off();
 }
 
 void loop()
