@@ -38,16 +38,22 @@ BLYNK_WRITE(V27) // App button to report uptime
 
   if (pinData == 0)
   {
-  timer.setTimeout(4000L, uptimeSend);
+  timer.setTimeout(6000L, uptimeSend);
   }
 }
 
-void uptimeSend()  // Blinks a virtual LED in the Blynk app to show the ESP is live and reporting.
+void uptimeSend()
 {
-  float secDur = millis() / 1000;
-  float minDur = secDur / 60;
-  float hourDur = minDur / 60;
-  terminal.println(String("Node02 (KK): ") + hourDur + " hours ");
+  long minDur = millis() / 60000L;
+  long hourDur = millis() / 3600000L;
+  if (minDur < 121)
+  {
+    terminal.println(String("Node02 (KK): ") + minDur + " mins");
+  }
+  else if (minDur > 120)
+  {
+    terminal.println(String("Node02 (KK): ") + hourDur + " hours");
+  }
   terminal.flush();
 }
 
