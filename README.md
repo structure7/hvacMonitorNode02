@@ -6,7 +6,7 @@
  * JSON parsing of Weather Undergrounds's API to bring the temperature of a neighbor's <a href="https://www.wunderground.com/personal-weather-station/dashboard?ID=KAZTEMPE29">PWS</a> to my Blynk project. Plan to add a notification when outdoor temp equals indoor temp so I know I can open the doors and windows!
 
 ## Lessons Learned
-###DS18B20: Put a wire on it.
+#### DS18B20: *Put a wire on it.*
 Sooooo... I was getting worried. I love everything about the DS18B20 temperature sensor. Power flexibility, addressing, and bells and whistles that I haven't touched yet. However, I was getting unreliable readings... usually too high. <a href="http://arduino.stackexchange.com/questions/789/my-ds18b20-is-reading-high-how-can-i-get-it-to-return-the-correct-temperature">After doing some reading</a> I soon understood my problem: Heat transmission.<br><br>
 I was very proud of my stubby little temp sensor plugged directly into my hacked baby monitor (above), but it was always giving me temps around 5°C higher than other sensors in the same space. I noticed I was getting the same on my solderless breadboard but figured my work area was a little warmer.<br><br>
 Now check out this photo... I simply added about 8" of wire to my DS18B20 (CAT5e conductors to be exact):
