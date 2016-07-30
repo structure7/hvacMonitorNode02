@@ -9,6 +9,10 @@
 #include <WidgetRTC.h>          // Blynk's RTC
 #include <ArduinoJson.h>        // For parsing information from Weather Underground API
 
+#include <ESP8266mDNS.h>        // Required for OTA
+#include <WiFiUdp.h>            // Required for OTA
+#include <ArduinoOTA.h>         // Required for OTA
+
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
@@ -16,10 +20,11 @@ DeviceAddress ds18b20kk = { 0x28, 0xEE, 0x9D, 0xEF, 0x00, 0x16, 0x02, 0x56 }; //
 
 const char auth[] = "fromBlynkApp";
 const char apiKey[] = "apiKey";
+char ssid[] = "ssid";
+char pass[] = "pw";
 
 SimpleTimer timer;
 
-WidgetLED led1(V10);
 WidgetTerminal terminal(V26);
 WidgetRTC rtc;
 BLYNK_ATTACH_WIDGET(rtc, V8);
@@ -40,13 +45,41 @@ int updateReady = 0;
 void setup()
 {
   Serial.begin(9600);
-  Blynk.begin(auth, "ssid", "pw");
+  Blynk.begin(auth, ssid, pw);
 
   WiFi.softAPdisconnect(true); // Per https://github.com/esp8266/Arduino/issues/676 this turns off AP
 
   while (Blynk.connect() == false) {
     // Wait until connected
   }
+
+  // START OTA ROUTINE
+  ArduinoOTA.setHostname("esp8266-Node02KK");
+
+  ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("MAC address: ");
+  Serial.println(WiFi.macAddress());
+  // END OTA ROUTINE
 
   rtc.begin();
 
@@ -55,7 +88,8 @@ void setup()
 
   timer.setInterval(2000L, sendTemps); // Temperature sensor polling interval
   timer.setInterval(180000L, sendWU);  // ~3 minutes between Wunderground API calls.
-  heartbeatOn();
+  timer.setInterval(1000L, uptimeReport);
+
   daySetter();
 }
 
@@ -63,6 +97,7 @@ void loop()
 {
   Blynk.run();
   timer.run();
+  ArduinoOTA.handle();
 }
 
 BLYNK_WRITE(V26)
@@ -70,18 +105,18 @@ BLYNK_WRITE(V26)
 
   if (updateReady == 1 && String("X") != param.asStr() && String("D") != param.asStr()) {
     currentWUsource = param.asStr();
-    terminal.println("");terminal.println("");
+    terminal.println(""); terminal.println("");
     terminal.println("WU source is now:");
     terminal.println(currentWUsource);
     terminal.println("");
     terminal.println("       ~WU API update mode CLOSED~");
-    terminal.println("");terminal.println("");
+    terminal.println(""); terminal.println("");
     updateReady = 0;
     delay(10);
   }
 
   if (String("WU") == param.asStr()) {
-    terminal.println("");terminal.println("");
+    terminal.println(""); terminal.println("");
     terminal.println("           ~WU API update mode~");
     terminal.println("Current source is:");
     terminal.println(currentWUsource);
@@ -93,20 +128,20 @@ BLYNK_WRITE(V26)
   }
   else if (String("X") == param.asStr())
   {
-    terminal.println("");terminal.println("");terminal.println("");
+    terminal.println(""); terminal.println(""); terminal.println("");
     terminal.println("     ~WU API update mode CANCELLED~");
-    terminal.println("");terminal.println("");
+    terminal.println(""); terminal.println("");
     updateReady = 0;
   }
   else if (String("D") == param.asStr())
   {
-    currentWUsource = "pws:KAZTEMPE47.json";
+    currentWUsource = "KPHX.json";
     terminal.println("");
     terminal.println("Source set to:");
     terminal.println(currentWUsource);
     terminal.println("");
     terminal.println("       ~WU API update mode CLOSED~");
-    terminal.println("");terminal.println("");    
+    terminal.println(""); terminal.println("");
     updateReady = 0;
   }
 
@@ -129,25 +164,22 @@ void uptimeSend()
   long hourDur = millis() / 3600000L;
   if (minDur < 121)
   {
-    terminal.println(String("Node02 (KK): ") + minDur + " mins");
+    terminal.print(String("Node02 (KK): ") + minDur + " mins @ ");
+    terminal.println(WiFi.localIP());
   }
   else if (minDur > 120)
   {
-    terminal.println(String("Node02 (KK): ") + hourDur + " hours");
+    terminal.print(String("Node02 (KK): ") + hourDur + " hrs @ ");
+    terminal.println(WiFi.localIP());
   }
   terminal.flush();
 }
 
-void heartbeatOn()  // Blinks a virtual LED in the Blynk app to show the ESP is live and reporting.
-{
-  led1.on();
-  timer.setTimeout(2500L, heartbeatOff);
-}
-
-void heartbeatOff()
-{
-  led1.off();  // The OFF portion of the LED heartbeat indicator in the Blynk app
-  timer.setTimeout(2500L, heartbeatOn);
+void uptimeReport(){
+  if (second() > 2 && second() < 7)
+  {
+    Blynk.virtualWrite(102, minute());
+  }
 }
 
 void sendTemps()
@@ -228,12 +260,12 @@ void sendWU()
   // This will send the http request to the server
   Serial.print("Sending request to Weather Underground API...");
   httpclient.print(String("GET /api/") + apiKey + "/conditions/q/" + currentWUsource + " HTTP/1.1\r\n"
-  "User-Agent: ESP8266/0.1\r\n"
-  "Accept: */*\r\n"
-  "Host: api.wunderground.com\r\n"
-  "Connection: close\r\n"
-  "\r\n");
-  
+                   "User-Agent: ESP8266/0.1\r\n"
+                   "Accept: */*\r\n"
+                   "Host: api.wunderground.com\r\n"
+                   "Connection: close\r\n"
+                   "\r\n");
+
   httpclient.flush();
 
   // Collect http response headers and content from Weather Underground
