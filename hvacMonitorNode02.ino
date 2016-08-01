@@ -1,3 +1,9 @@
+/* Node02 responsibilities:
+ * - Use Weather Underground's API to update the exterior temperature.
+ * - Records daily outside high and low temperature. Resetting Node02 erases this information.
+ * - Reports KK's bedroom temperature.
+ */
+
 #include <SimpleTimer.h>
 #define BLYNK_PRINT Serial      // Comment this out to disable prints and save space
 #include <ESP8266WiFi.h>
@@ -19,7 +25,7 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress ds18b20kk = { 0x28, 0xEE, 0x9D, 0xEF, 0x00, 0x16, 0x02, 0x56 }; // KK
 
 const char auth[] = "fromBlynkApp";
-const char apiKey[] = "apiKey";
+const char apiKey[] = "wuAPIkey";
 char ssid[] = "ssid";
 char pass[] = "pw";
 
@@ -34,7 +40,7 @@ int dailyOutsideHigh = 0;   // Today's high temp (resets at midnight)
 int dailyOutsideLow = 200;  // Today's low temp (resets at midnight)
 int today;
 String currentWUsource = "KPHX.json"; // Fallback if unit resets!
-int updateReady = 0;
+bool updateModeActive = 0;  // True means WU API update mode is active.
 
 // The original time entries that didn't like being removed.
 #define DELAY_NORMAL    (10)
@@ -45,7 +51,7 @@ int updateReady = 0;
 void setup()
 {
   Serial.begin(9600);
-  Blynk.begin(auth, ssid, pw);
+  Blynk.begin(auth, ssid, pass);
 
   WiFi.softAPdisconnect(true); // Per https://github.com/esp8266/Arduino/issues/676 this turns off AP
 
@@ -103,7 +109,7 @@ void loop()
 BLYNK_WRITE(V26)
 {
 
-  if (updateReady == 1 && String("X") != param.asStr() && String("D") != param.asStr()) {
+  if (updateModeActive == 1 && String("X") != param.asStr() && String("D") != param.asStr() && String("x") != param.asStr() && String("d") != param.asStr()) {
     currentWUsource = param.asStr();
     terminal.println(""); terminal.println("");
     terminal.println("WU source is now:");
@@ -111,7 +117,8 @@ BLYNK_WRITE(V26)
     terminal.println("");
     terminal.println("       ~WU API update mode CLOSED~");
     terminal.println(""); terminal.println("");
-    updateReady = 0;
+    sendWU();
+    updateModeActive = 0;
     delay(10);
   }
 
@@ -122,18 +129,18 @@ BLYNK_WRITE(V26)
     terminal.println(currentWUsource);
     terminal.println("");
     terminal.println("Enter new URL following '/q/' or");
-    terminal.println("'X' to cancel, or 'D' for default.");
-    updateReady = 1;
+    terminal.println("'x' to cancel, or 'd' for default.");
+    updateModeActive = 1;
     delay(10);
   }
-  else if (String("X") == param.asStr())
+  else if ( (String("X") == param.asStr() || String("x") == param.asStr()) && updateModeActive == 1)
   {
     terminal.println(""); terminal.println(""); terminal.println("");
     terminal.println("     ~WU API update mode CANCELLED~");
     terminal.println(""); terminal.println("");
-    updateReady = 0;
+    updateModeActive = 0;
   }
-  else if (String("D") == param.asStr())
+  else if ( (String("D") == param.asStr() || String("d") == param.asStr()) && updateModeActive == 1)
   {
     currentWUsource = "KPHX.json";
     terminal.println("");
@@ -142,7 +149,8 @@ BLYNK_WRITE(V26)
     terminal.println("");
     terminal.println("       ~WU API update mode CLOSED~");
     terminal.println(""); terminal.println("");
-    updateReady = 0;
+    sendWU();
+    updateModeActive = 0;
   }
 
   terminal.flush();
