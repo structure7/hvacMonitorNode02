@@ -3,7 +3,7 @@
 
 ## Features
  * Arduino code running on a single [ESP-01 (the tiny ESP8266 board)](https://www.hackster.io/esp/products/esp8266-esp-01).
- * JSON parsing of Weather Undergrounds's API to bring the temperature of a neighbor's <a href="https://www.wunderground.com/personal-weather-station/dashboard?ID=KAZTEMPE29">PWS</a> to my Blynk project. Plan to add a notification when outdoor temp equals indoor temp so I know I can open the doors and windows!
+ * JSON parsing of Weather Undergrounds's API to bring the temperature of a neighbor's <a href="https://www.wunderground.com/personal-weather-station/dashboard?ID=KAZTEMPE29">PWS</a> to my Blynk project. Plan to add a notification when outdoor temp equals indoor temp so I know I can open the doors and windows! I'll probably just add my own outdoor temp sensors as other PWSs don't seem to always be consistent or reliable.
 
 ## Lessons Learned
 #### DS18B20: *Put a wire on it.*
