@@ -11,7 +11,7 @@ Sooooo... I was getting worried. I love everything about the DS18B20 temperature
 I was very proud of my stubby little temp sensor plugged directly into my hacked baby monitor (above), but it was always giving me temps around 5°C higher than other sensors in the same space. I noticed I was getting the same on my solderless breadboard but figured my work area was a little warmer.<br><br>
 Now check out this photo... I simply added about 8" of wire to my DS18B20 (CAT5e conductors to be exact):
 <p align="center"><img src="http://i.imgur.com/o0QafJa.jpg"/></p><br>
-I have reproduced this "phenomenon" with at least 3 sensors so far. Interesting! If adding a length of wire isn't possible for your project, experiment with correct the temperature in code. This should work as long as the "localized heating" of your project is consistent.<br>
+I have reproduced this "phenomenon" with at least 3 sensors so far. Interesting! If adding a length of wire isn't possible for your project, experiment with correcting the temperature in code. This should work as long as the "localized heating" of your project is consistent.<br>
 ## Libraries and Resources
 
 Title | Include | Link
