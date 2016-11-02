@@ -1,8 +1,7 @@
 /* Node02 responsibilities:
- * - Use Weather Underground's API to update the exterior temperature.
- * - Records daily outside high and low temperature. Resetting Node02 erases this information.
- * - Reports KK's bedroom temperature.
- */
+   - Reports KK's bedroom temperature as displays last 24-hours high/low temps in app display label.
+   - Previously collection outside temp via Weather Underground API.
+*/
 
 #include <SimpleTimer.h>
 #define BLYNK_PRINT Serial      // Comment this out to disable prints and save space
@@ -10,22 +9,20 @@
 #include <BlynkSimpleEsp8266.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#define ONE_WIRE_BUS 0
+
 #include <TimeLib.h>            // Used by WidgetRTC.h
 #include <WidgetRTC.h>          // Blynk's RTC
-#include <ArduinoJson.h>        // For parsing information from Weather Underground API
 
 #include <ESP8266mDNS.h>        // Required for OTA
 #include <WiFiUdp.h>            // Required for OTA
 #include <ArduinoOTA.h>         // Required for OTA
 
+#define ONE_WIRE_BUS 0          // WeMos pin D3 w/ pull-up
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
-
 DeviceAddress ds18b20kk = { 0x28, 0xEE, 0x9D, 0xEF, 0x00, 0x16, 0x02, 0x56 }; // KK
 
 const char auth[] = "fromBlynkApp";
-const char apiKey[] = "wuAPIkey";
 char ssid[] = "ssid";
 char pass[] = "pw";
 
@@ -35,25 +32,18 @@ WidgetTerminal terminal(V26);
 WidgetRTC rtc;
 BLYNK_ATTACH_WIDGET(rtc, V8);
 
-int temp_f;                 // Current outdoor temp from WU API
-int dailyOutsideHigh = 0;   // Today's high temp (resets at midnight)
-int dailyOutsideLow = 200;  // Today's low temp (resets at midnight)
-int today;
-String currentWUsource = "KPHX.json"; // Fallback if unit resets!
-bool updateModeActive = 0;  // True means WU API update mode is active.
+int tempKK;
 
-// The original time entries that didn't like being removed.
-#define DELAY_NORMAL    (10)
-#define DELAY_ERROR     (10)
-
-//#define WUNDERGROUND "api.wunderground.com"
+int last24high, last24low;    // Rolling high/low temps in last 24-hours.
+int last24hoursTemps[288];    // Last 24-hours temps recorded every 5 minutes.
+int arrayIndex = 0;
 
 void setup()
 {
   Serial.begin(9600);
   Blynk.begin(auth, ssid, pass);
 
-  WiFi.softAPdisconnect(true); // Per https://github.com/esp8266/Arduino/issues/676 this turns off AP
+  //WiFi.softAPdisconnect(true); // Per https://github.com/esp8266/Arduino/issues/676 this turns off AP
 
   while (Blynk.connect() == false) {
     // Wait until connected
@@ -90,13 +80,12 @@ void setup()
   rtc.begin();
 
   sensors.begin();
-  sensors.setResolution(ds18b20kk, 10);
+  sensors.setResolution(10);
 
-  timer.setInterval(2000L, sendTemps); // Temperature sensor polling interval
-  timer.setInterval(180000L, sendWU);  // ~3 minutes between Wunderground API calls.
-  timer.setInterval(1000L, uptimeReport);
-
-  daySetter();
+  timer.setInterval(2000L, sendTemps);            // Temperature sensor reporting to app display
+  timer.setInterval(300000L, recordTempToArray);  // Array updated ~5 minutes
+  timer.setInterval(1000L, uptimeReport);         // Records current minute
+  timer.setTimeout(5000, setupArray);             // Sets entire array to temp at startup for a "baseline"
 }
 
 void loop()
@@ -104,56 +93,6 @@ void loop()
   Blynk.run();
   timer.run();
   ArduinoOTA.handle();
-}
-
-BLYNK_WRITE(V26)
-{
-
-  if (updateModeActive == 1 && String("X") != param.asStr() && String("D") != param.asStr() && String("x") != param.asStr() && String("d") != param.asStr()) {
-    currentWUsource = param.asStr();
-    terminal.println(""); terminal.println("");
-    terminal.println("WU source is now:");
-    terminal.println(currentWUsource);
-    terminal.println("");
-    terminal.println("       ~WU API update mode CLOSED~");
-    terminal.println(""); terminal.println("");
-    sendWU();
-    updateModeActive = 0;
-    delay(10);
-  }
-
-  if (String("WU") == param.asStr()) {
-    terminal.println(""); terminal.println("");
-    terminal.println("           ~WU API update mode~");
-    terminal.println("Current source is:");
-    terminal.println(currentWUsource);
-    terminal.println("");
-    terminal.println("Enter new URL following '/q/' or");
-    terminal.println("'x' to cancel, or 'd' for default.");
-    updateModeActive = 1;
-    delay(10);
-  }
-  else if ( (String("X") == param.asStr() || String("x") == param.asStr()) && updateModeActive == 1)
-  {
-    terminal.println(""); terminal.println(""); terminal.println("");
-    terminal.println("     ~WU API update mode CANCELLED~");
-    terminal.println(""); terminal.println("");
-    updateModeActive = 0;
-  }
-  else if ( (String("D") == param.asStr() || String("d") == param.asStr()) && updateModeActive == 1)
-  {
-    currentWUsource = "KPHX.json";
-    terminal.println("");
-    terminal.println("Source set to:");
-    terminal.println(currentWUsource);
-    terminal.println("");
-    terminal.println("       ~WU API update mode CLOSED~");
-    terminal.println(""); terminal.println("");
-    sendWU();
-    updateModeActive = 0;
-  }
-
-  terminal.flush();
 }
 
 BLYNK_WRITE(V27) // App button to report uptime
@@ -164,6 +103,51 @@ BLYNK_WRITE(V27) // App button to report uptime
   {
     timer.setTimeout(6000L, uptimeSend);
   }
+}
+
+void setupArray()
+{
+  for (int i = 0; i < 289; i++)
+  {
+    last24hoursTemps[i] = tempKK;
+  }
+
+    Blynk.setProperty(V4, "label", "Keaton");
+
+}
+
+void recordTempToArray()
+{
+
+  //Serial.print(String("[") + millis() + "] ");
+
+  if (arrayIndex < 289)                   // Mess with array size and timing to taste!
+  {
+    last24hoursTemps[arrayIndex] = tempKK;
+    ++arrayIndex;
+  }
+  else
+  {
+    arrayIndex = 0;
+  }
+
+  for (int i = 0; i < 289; i++)
+  {
+    if (last24hoursTemps[i] > last24high)
+    {
+      last24high = last24hoursTemps[i];
+    }
+
+    if (last24hoursTemps[i] < last24low)
+    {
+      last24low = last24hoursTemps[i];
+    }
+
+    //Serial.print(String("") + last24hoursTemps[i] + " ");
+  }
+
+  //Serial.println("");
+  Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);  // Sets label with high/low temps.
 }
 
 void uptimeSend()
@@ -183,7 +167,7 @@ void uptimeSend()
   terminal.flush();
 }
 
-void uptimeReport(){
+void uptimeReport() {
   if (second() > 2 && second() < 7)
   {
     Blynk.virtualWrite(102, minute());
@@ -192,9 +176,9 @@ void uptimeReport(){
 
 void sendTemps()
 {
-  sensors.requestTemperatures(); // Polls the sensors
+  sensors.requestTemperatures();         // Polls the sensors
 
-  float tempKK = sensors.getTempF(ds18b20kk); // Gets first probe on wire in lieu of by address
+  tempKK = sensors.getTempF(ds18b20kk);
 
   if (tempKK > 0)
   {
@@ -204,155 +188,17 @@ void sendTemps()
   {
     Blynk.virtualWrite(4, "ERR");
   }
-}
 
-static char respBuf[4096];
-bool showWeather(char *json);
-
-void sendWUtoBlynk()
-{
-  // Intended to screen out errors from Wunderground API
-  if (temp_f > 10)
+  if (tempKK < 78)
   {
-    Blynk.virtualWrite(12, temp_f);
-    Serial.println(" ");
-    Serial.println(String("[") + millis() + "] Temp of " + temp_f + " sent to Blynk vPin 12.");
+    Blynk.setProperty(V4, "color", "#04C0F8"); // Blue
   }
-  else
+  else if (tempKK >= 78 && tempKK <= 80)
   {
-    Blynk.virtualWrite(12, "ERR");
-    //Blynk.tweet(String("WU API error reporting a temp value of ") + temp_f + " at " + hour() + ":" + minute() + ":" + second() + " " + month() + "/" + day() + "/" + year());
+    Blynk.setProperty(V4, "color", "#ED9D00"); // Yellow
   }
-
-
-  if (temp_f > dailyOutsideHigh)
+  else if (tempKK > 80)
   {
-    dailyOutsideHigh = temp_f;
-    Blynk.virtualWrite(5, dailyOutsideHigh);
+    Blynk.setProperty(V4, "color", "#D3435C"); // Red
   }
-
-  if (temp_f < dailyOutsideLow && temp_f > 0) // "> 0" screens out API zero errors
-  {
-    dailyOutsideLow = temp_f;
-    Blynk.virtualWrite(13, dailyOutsideLow);
-  }
-
-  if (today != day())
-  {
-    dailyOutsideHigh = 0;
-    dailyOutsideLow = 200;
-    daySetter();
-  }
-}
-
-void daySetter()
-{
-  today = day();
-}
-
-void sendWU()
-{
-  // Open socket to WU server port 80
-  Serial.print(F("Connecting to "));
-  Serial.println("api.wunderground.com");
-
-  // Use WiFiClient class to create TCP connections
-  WiFiClient httpclient;
-  const int httpPort = 80;
-  if (!httpclient.connect("api.wunderground.com", httpPort)) {
-    Serial.println(F("connection failed"));
-    delay(DELAY_ERROR);
-    return;
-  }
-
-  // This will send the http request to the server
-  Serial.print("Sending request to Weather Underground API...");
-  httpclient.print(String("GET /api/") + apiKey + "/conditions/q/" + currentWUsource + " HTTP/1.1\r\n"
-                   "User-Agent: ESP8266/0.1\r\n"
-                   "Accept: */*\r\n"
-                   "Host: api.wunderground.com\r\n"
-                   "Connection: close\r\n"
-                   "\r\n");
-
-  httpclient.flush();
-
-  // Collect http response headers and content from Weather Underground
-  // HTTP headers are discarded.
-  // The content is formatted in JSON and is left in respBuf.
-  int respLen = 0;
-  bool skip_headers = true;
-  while (httpclient.connected() || httpclient.available()) {
-    if (skip_headers) {
-      String aLine = httpclient.readStringUntil('\n');
-      //Serial.println(aLine);
-      // Blank line denotes end of headers
-      if (aLine.length() <= 1) {
-        skip_headers = false;
-      }
-    }
-    else {
-      int bytesIn;
-      bytesIn = httpclient.read((uint8_t *)&respBuf[respLen], sizeof(respBuf) - respLen);
-      Serial.print(F("bytesIn ")); Serial.println(bytesIn);
-      if (bytesIn > 0) {
-        respLen += bytesIn;
-        if (respLen > sizeof(respBuf)) respLen = sizeof(respBuf);
-      }
-      else if (bytesIn < 0) {
-        Serial.print(F("read error "));
-        Serial.println(bytesIn);
-      }
-    }
-    delay(1);
-  }
-  httpclient.stop();
-
-  if (respLen >= sizeof(respBuf)) {
-    Serial.print(F("respBuf overflow "));
-    Serial.println(respLen);
-    delay(DELAY_ERROR);
-    return;
-  }
-  // Terminate the C string
-  respBuf[respLen++] = '\0';
-  Serial.print(F("respLen "));
-  Serial.println(respLen);
-  //Serial.println(respBuf);
-
-  if (showWeather(respBuf)) {
-    timer.setTimeout(5000L, sendWUtoBlynk); // Send update to Blynk app shortly after API update.
-    delay(DELAY_NORMAL);
-  }
-  else {
-    delay(DELAY_ERROR);
-  }
-}
-
-bool showWeather(char *json)
-{
-  StaticJsonBuffer<3 * 1024> jsonBuffer;
-
-  // Skip characters until first '{' found
-  // Ignore chunked length, if present
-  char *jsonstart = strchr(json, '{');
-  //Serial.print(F("jsonstart ")); Serial.println(jsonstart);
-  if (jsonstart == NULL) {
-    Serial.println(F("JSON data missing"));
-    return false;
-  }
-  json = jsonstart;
-
-  // Parse JSON
-  JsonObject& root = jsonBuffer.parseObject(json);
-  if (!root.success()) {
-    Serial.println(F("jsonBuffer.parseObject() failed"));
-    return false;
-  }
-
-  // Extract weather info from parsed JSON
-  JsonObject& current = root["current_observation"];
-  temp_f = current["temp_f"];  // Was `const float temp_f = current["temp_f"];`
-  //Serial.print(temp_f, 1); Serial.print(F(" F "));
-
-  return true;
 }
