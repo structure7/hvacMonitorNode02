@@ -3,7 +3,7 @@
 
 ## Features
  * Arduino code running on a single [ESP-01 (the tiny ESP8266 board)](https://www.hackster.io/esp/products/esp8266-esp-01).
- * JSON parsing of Weather Undergrounds's API to bring the temperature of a neighbor's <a href="https://www.wunderground.com/personal-weather-station/dashboard?ID=KAZTEMPE29">PWS</a> to my Blynk project. Plan to add a notification when outdoor temp equals indoor temp so I know I can open the doors and windows! I'll probably just add my own outdoor temp sensors as other PWSs don't seem to always be consistent or reliable.
+ * ~~JSON parsing of Weather Undergrounds's API to bring the temperature of a neighbor's <a href="https://www.wunderground.com/personal-weather-station/dashboard?ID=KAZTEMPE29">PWS</a> to my Blynk project. Plan to add a notification when outdoor temp equals indoor temp so I know I can open the doors and windows! I'll probably just add my own outdoor temp sensors as other PWSs don't seem to always be consistent or reliable.~~ The API and parsing library worked just fine, but I could never find a Weather Underground station that had correct "microclimate" information. The local airport weather station always reported warmer, and a personal weather station in my neighborhood was unreliable. I switched to my own outdoor sensor!
 
 ## Lessons Learned
 #### DS18B20: *Put a wire on it.*
@@ -23,7 +23,6 @@ SimpleTimer | SimpleTimer.h | https://github.com/jfturcot/SimpleTimer
 ESP8266/Arduino | ESP8266WiFi.h | https://github.com/esp8266/Arduino
 blynk-library | BlynkSimpleEsp8266.h | https://github.com/blynkkk/blynk-library
 ESP8266 board mgr | N/A | [json](http://arduino.esp8266.com/stable/package_esp8266com_index.json) & [instructions](https://github.com/esp8266/Arduino#installing-with-boards-manager)
-ArduinoJson | ArduinoJson.h | https://github.com/bblanchon/ArduinoJson
 
 
 Many thanks to the authors of the libraries above. [How to edit this.](https://guides.github.com/features/mastering-markdown/)
