@@ -1,6 +1,6 @@
 /* Node02 responsibilities:
    - Reports KK's bedroom temperature as displays last 24-hours high/low temps in app display label.
-   - Previously collection outside temp via Weather Underground API.
+   - Previously collected outside temp via Weather Underground API.
 */
 
 #include <SimpleTimer.h>
@@ -22,7 +22,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DeviceAddress ds18b20kk = { 0x28, 0xEE, 0x9D, 0xEF, 0x00, 0x16, 0x02, 0x56 }; // KK
 
-const char auth[] = "fromBlynkApp";
+const char auth[] = "fromBlnkApp";
 char ssid[] = "ssid";
 char pass[] = "pw";
 
@@ -32,7 +32,11 @@ WidgetTerminal terminal(V26);
 WidgetRTC rtc;
 BLYNK_ATTACH_WIDGET(rtc, V8);
 
-int tempKK;
+double tempKK;    // Room temp
+int tempKKint;    // Room temp converted to int
+
+int dailyHigh = 0;
+int dailyLow = 200;
 
 int last24high, last24low;    // Rolling high/low temps in last 24-hours.
 int last24hoursTemps[288];    // Last 24-hours temps recorded every 5 minutes.
@@ -83,9 +87,11 @@ void setup()
   sensors.setResolution(10);
 
   timer.setInterval(2000L, sendTemps);            // Temperature sensor reporting to app display
-  timer.setInterval(300000L, recordTempToArray);  // Array updated ~5 minutes
   timer.setInterval(1000L, uptimeReport);         // Records current minute
+  timer.setInterval(300000L, recordTempToArray);  // Array updated ~5 minutes
   timer.setTimeout(5000, setupArray);             // Sets entire array to temp at startup for a "baseline"
+  timer.setInterval(15000L, hiLoTemps);
+  timer.setInterval(30000L, resetHiLoTemps);
 }
 
 void loop()
@@ -103,51 +109,6 @@ BLYNK_WRITE(V27) // App button to report uptime
   {
     timer.setTimeout(6000L, uptimeSend);
   }
-}
-
-void setupArray()
-{
-  for (int i = 0; i < 289; i++)
-  {
-    last24hoursTemps[i] = tempKK;
-  }
-
-    Blynk.setProperty(V4, "label", "Keaton");
-
-}
-
-void recordTempToArray()
-{
-
-  //Serial.print(String("[") + millis() + "] ");
-
-  if (arrayIndex < 289)                   // Mess with array size and timing to taste!
-  {
-    last24hoursTemps[arrayIndex] = tempKK;
-    ++arrayIndex;
-  }
-  else
-  {
-    arrayIndex = 0;
-  }
-
-  for (int i = 0; i < 289; i++)
-  {
-    if (last24hoursTemps[i] > last24high)
-    {
-      last24high = last24hoursTemps[i];
-    }
-
-    if (last24hoursTemps[i] < last24low)
-    {
-      last24low = last24hoursTemps[i];
-    }
-
-    //Serial.print(String("") + last24hoursTemps[i] + " ");
-  }
-
-  //Serial.println("");
-  Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);  // Sets label with high/low temps.
 }
 
 void uptimeSend()
@@ -180,6 +141,19 @@ void sendTemps()
 
   tempKK = sensors.getTempF(ds18b20kk);
 
+  // Conversion of tempKK to tempKKint
+  int xKKint = (int) tempKK;
+  double xKK10ths = (tempKK - xKKint);
+  if (xKK10ths >= .50)
+  {
+    tempKKint = (xKKint + 1);
+  }
+  else
+  {
+    tempKKint = xKKint;
+  }
+
+  // Send temperature to the app display
   if (tempKK > 0)
   {
     Blynk.virtualWrite(4, tempKK);
@@ -189,6 +163,7 @@ void sendTemps()
     Blynk.virtualWrite(4, "ERR");
   }
 
+  // Set the app display color based on temperature
   if (tempKK < 78)
   {
     Blynk.setProperty(V4, "color", "#04C0F8"); // Blue
@@ -200,5 +175,81 @@ void sendTemps()
   else if (tempKK > 80)
   {
     Blynk.setProperty(V4, "color", "#D3435C"); // Red
+  }
+}
+
+void setupArray()
+{
+  for (int i = 0; i < 289; i++)
+  {
+    last24hoursTemps[i] = tempKKint;
+  }
+
+  Blynk.setProperty(V4, "label", "Keaton");
+}
+
+void recordTempToArray()
+{
+  if (arrayIndex < 289)                   // Mess with array size and timing to taste!
+  {
+    last24hoursTemps[arrayIndex] = tempKKint;
+    ++arrayIndex;
+  }
+  else
+  {
+    arrayIndex = 0;
+  }
+
+  for (int i = 0; i < 289; i++)
+  {
+    if (last24hoursTemps[i] > last24high)
+    {
+      last24high = last24hoursTemps[i];
+    }
+
+    if (last24hoursTemps[i] < last24low)
+    {
+      last24low = last24hoursTemps[i];
+    }
+  }
+
+  Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);  // Sets label with high/low temps.
+}
+
+BLYNK_WRITE(V19)
+{
+  int pinData = param.asInt();
+
+  if (pinData == 0)
+  {
+    Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);
+  }
+
+  if (pinData == 1)
+  {
+    Blynk.setProperty(V4, "label", String("Keaton ") + dailyHigh + "|" + dailyLow);
+  }
+}
+
+void resetHiLoTemps()
+{
+  // Daily at 00:01, yesterday's high/low temps are reset,
+  if (hour() == 00 && minute() == 01)
+  {
+    dailyHigh = 0;     // Resets daily high temp
+    dailyLow = 200;    // Resets daily low temp
+  }
+}
+
+void hiLoTemps()
+{
+  if (tempKKint > dailyHigh)
+  {
+    dailyHigh = tempKKint;
+  }
+
+  if (tempKKint < dailyLow)
+  {
+    dailyLow = tempKKint;
   }
 }
