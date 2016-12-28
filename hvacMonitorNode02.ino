@@ -22,7 +22,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DeviceAddress ds18b20kk = { 0x28, 0xEE, 0x9D, 0xEF, 0x00, 0x16, 0x02, 0x56 }; // KK
 
-const char auth[] = "fromBlnkApp";
+const char auth[] = "fromBlynkApp";
 char ssid[] = "ssid";
 char pass[] = "pw";
 
@@ -54,7 +54,7 @@ void setup()
   }
 
   // START OTA ROUTINE
-  ArduinoOTA.setHostname("esp8266-Node02KK");
+  ArduinoOTA.setHostname("Node02KK-WeMosD1mini");
 
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
@@ -88,10 +88,8 @@ void setup()
 
   timer.setInterval(2000L, sendTemps);            // Temperature sensor reporting to app display
   timer.setInterval(1000L, uptimeReport);         // Records current minute
-  timer.setInterval(300000L, recordTempToArray);  // Array updated ~5 minutes
   timer.setTimeout(5000, setupArray);             // Sets entire array to temp at startup for a "baseline"
-  timer.setInterval(15000L, hiLoTemps);
-  timer.setInterval(30000L, resetHiLoTemps);
+  timer.setInterval(300000L, recordHighLowTemps);  // Array updated ~5 minutes
 }
 
 void loop()
@@ -99,6 +97,11 @@ void loop()
   Blynk.run();
   timer.run();
   ArduinoOTA.handle();
+
+  if (hour() == 00 && minute() == 01)
+  {
+    timer.setTimeout(61000, resetHiLoTemps);
+  }
 }
 
 BLYNK_WRITE(V27) // App button to report uptime
@@ -180,17 +183,20 @@ void sendTemps()
 
 void setupArray()
 {
-  for (int i = 0; i < 289; i++)
+  for (int i = 0; i < 288; i++)
   {
     last24hoursTemps[i] = tempKKint;
   }
 
+  last24high = tempKKint;
+  last24low = tempKKint;
+
   Blynk.setProperty(V4, "label", "Keaton");
 }
 
-void recordTempToArray()
+void recordHighLowTemps()
 {
-  if (arrayIndex < 289)                   // Mess with array size and timing to taste!
+  if (arrayIndex < 288)
   {
     last24hoursTemps[arrayIndex] = tempKKint;
     ++arrayIndex;
@@ -198,9 +204,14 @@ void recordTempToArray()
   else
   {
     arrayIndex = 0;
+    last24hoursTemps[arrayIndex] = tempKKint;
+    ++arrayIndex;
   }
 
-  for (int i = 0; i < 289; i++)
+  last24high = -200;
+  last24low = 200;
+
+  for (int i = 0; i < 288; i++)
   {
     if (last24hoursTemps[i] > last24high)
     {
@@ -211,6 +222,16 @@ void recordTempToArray()
     {
       last24low = last24hoursTemps[i];
     }
+  }
+
+  if (tempKKint > dailyHigh)
+  {
+    dailyHigh = tempKKint;
+  }
+
+  if (tempKKint < dailyLow)
+  {
+    dailyLow = tempKKint;
   }
 
   Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);  // Sets label with high/low temps.
@@ -233,23 +254,6 @@ BLYNK_WRITE(V19)
 
 void resetHiLoTemps()
 {
-  // Daily at 00:01, yesterday's high/low temps are reset,
-  if (hour() == 00 && minute() == 01)
-  {
-    dailyHigh = 0;     // Resets daily high temp
-    dailyLow = 200;    // Resets daily low temp
-  }
-}
-
-void hiLoTemps()
-{
-  if (tempKKint > dailyHigh)
-  {
-    dailyHigh = tempKKint;
-  }
-
-  if (tempKKint < dailyLow)
-  {
-    dailyLow = tempKKint;
-  }
+  dailyHigh = 0;     // Resets daily high temp
+  dailyLow = 200;    // Resets daily low temp
 }
