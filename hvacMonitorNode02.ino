@@ -1,11 +1,9 @@
 /* Node02 responsibilities:
    - Reports KK's bedroom temperature as displays last 24-hours high/low temps in app display label.
-   - Previously collected outside temp via Weather Underground API.
 */
 
 #include <SimpleTimer.h>
 #define BLYNK_PRINT Serial      // Comment this out to disable prints and save space
-#include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -30,7 +28,6 @@ SimpleTimer timer;
 
 WidgetTerminal terminal(V26);
 WidgetRTC rtc;
-BLYNK_ATTACH_WIDGET(rtc, V8);
 
 double tempKK;    // Room temp
 int tempKKint;    // Room temp converted to int
