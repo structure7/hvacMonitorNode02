@@ -28,6 +28,7 @@ SimpleTimer timer;
 
 WidgetTerminal terminal(V26);
 WidgetRTC rtc;
+WidgetBridge bridge1(V50);
 
 double tempKK;    // Room temp
 int tempKKint;    // Room temp converted to int
@@ -43,7 +44,7 @@ void setup()
 {
   Serial.begin(9600);
   Blynk.begin(auth, ssid, pass);
-
+  
   //WiFi.softAPdisconnect(true); // Per https://github.com/esp8266/Arduino/issues/676 this turns off AP
 
   while (Blynk.connect() == false) {
@@ -86,6 +87,7 @@ void setup()
   timer.setInterval(2000L, sendTemps);            // Temperature sensor reporting to app display
   timer.setInterval(1000L, uptimeReport);         // Records current minute
   timer.setTimeout(5000, setupArray);             // Sets entire array to temp at startup for a "baseline"
+  timer.setInterval(30000, sendControlTemp);      // Sends temp to hvacMonitor via bridge for control
   timer.setInterval(300000L, recordHighLowTemps);  // Array updated ~5 minutes
 }
 
@@ -99,6 +101,14 @@ void loop()
   {
     timer.setTimeout(61000, resetHiLoTemps);
   }
+}
+
+void sendControlTemp() {
+  bridge1.virtualWrite(V127, 2, tempKK);    // Writing "2" for this node, then the temp.
+}
+
+BLYNK_CONNECTED() {
+  bridge1.setAuthToken("*2104"); // Place the AuthToken of the second hardware here
 }
 
 BLYNK_WRITE(V27) // App button to report uptime
@@ -232,21 +242,6 @@ void recordHighLowTemps()
   }
 
   Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);  // Sets label with high/low temps.
-}
-
-BLYNK_WRITE(V19)
-{
-  int pinData = param.asInt();
-
-  if (pinData == 0)
-  {
-    Blynk.setProperty(V4, "label", String("Keaton ") + last24high + "/" + last24low);
-  }
-
-  if (pinData == 1)
-  {
-    Blynk.setProperty(V4, "label", String("Keaton ") + dailyHigh + "|" + dailyLow);
-  }
 }
 
 void resetHiLoTemps()
