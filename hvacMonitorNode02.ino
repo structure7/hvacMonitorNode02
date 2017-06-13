@@ -40,11 +40,14 @@ int last24high, last24low;    // Rolling high/low temps in last 24-hours.
 int last24hoursTemps[288];    // Last 24-hours temps recorded every 5 minutes.
 int arrayIndex = 0;
 
+bool ranOnce;
+long startupTime;
+
 void setup()
 {
   Serial.begin(9600);
   Blynk.begin(auth, ssid, pass);
-  
+
   //WiFi.softAPdisconnect(true); // Per https://github.com/esp8266/Arduino/issues/676 this turns off AP
 
   while (Blynk.connect() == false) {
@@ -101,6 +104,11 @@ void loop()
   {
     timer.setTimeout(61000, resetHiLoTemps);
   }
+
+  if (ranOnce == false && year() != 1970) {
+    ranOnce = true;
+    startupTime = now();
+  }
 }
 
 void sendControlTemp() {
@@ -108,7 +116,7 @@ void sendControlTemp() {
 }
 
 BLYNK_CONNECTED() {
-  bridge1.setAuthToken("*2104"); // Place the AuthToken of the second hardware here
+  bridge1.setAuthToken(auth); // Place the AuthToken of the second hardware here
 }
 
 BLYNK_WRITE(V27) // App button to report uptime
@@ -121,28 +129,32 @@ BLYNK_WRITE(V27) // App button to report uptime
   }
 }
 
-void uptimeSend()
-{
-  long minDur = millis() / 60000L;
-  long hourDur = millis() / 3600000L;
-  if (minDur < 121)
-  {
-    terminal.print(String("Node02 (KK): ") + minDur + " mins @ ");
-    terminal.println(WiFi.localIP());
-  }
-  else if (minDur > 120)
-  {
-    terminal.print(String("Node02 (KK): ") + hourDur + " hrs @ ");
-    terminal.println(WiFi.localIP());
-  }
-  terminal.flush();
-}
-
 void uptimeReport() {
   if (second() > 2 && second() < 7)
   {
     Blynk.virtualWrite(102, minute());
   }
+}
+
+void uptimeSend()
+{
+  long minDur = (now() - startupTime) / 60L;
+  long hourDur = (now() - startupTime) / 3600L;
+  if (minDur < 121)
+  {
+    terminal.print(String("Node02 (KK): ") + minDur + " min/");
+    terminal.print(WiFi.RSSI());
+    terminal.print("/");
+    terminal.println(WiFi.localIP());
+  }
+  else if (minDur > 120)
+  {
+    terminal.print(String("Node02 (KK): ") + hourDur + " hrs/");
+    terminal.print(WiFi.RSSI());
+    terminal.print("/");
+    terminal.println(WiFi.localIP());
+  }
+  terminal.flush();
 }
 
 void sendTemps()
